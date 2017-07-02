@@ -4,6 +4,7 @@ add_executable(nalu_preprocess
   NDTW2D.cpp
   SamplingPlanes.cpp
   ABLFields.cpp
+  EkmanLayer.cpp
   RotateMesh.cpp
 
   PreProcessDriver.cpp
