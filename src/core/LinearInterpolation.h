@@ -121,13 +121,13 @@ find_index(const Array1D<T>& xinp, const T& x)
  * \param yout Interpolated value at `xout`
  * \param oob  (Optional) Out-of-bounds handling (default: CLAMP)
  */
-template <typename T>
+template <typename T1, typename T2>
 void
 linear_interp(
-  const Array1D<T>& xinp,
-  const Array1D<T>& yinp,
-  const T& xout,
-  T& yout,
+  const Array1D<T1>& xinp,
+  const Array1D<T2>& yinp,
+  const T1& xout,
+  T2& yout,
   OutOfBounds::OobAction oob = OutOfBounds::CLAMP)
 {
   auto idx = find_index(xinp, xout);
@@ -166,8 +166,8 @@ linear_interp(
   }
   case OutOfBounds::VALID:
     auto j = idx.second;
-    T fac = (xout - xinp[j]) / (xinp[j + 1] - xinp[j]);
-    yout = (static_cast<T>(1.0) - fac) * yinp[j] + fac * yinp[j + 1];
+    T1 fac = (xout - xinp[j]) / (xinp[j + 1] - xinp[j]);
+    yout = (static_cast<T1>(1.0) - fac) * yinp[j] + fac * yinp[j + 1];
     break;
   }
 }
