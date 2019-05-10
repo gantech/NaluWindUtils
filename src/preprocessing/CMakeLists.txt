@@ -6,6 +6,7 @@ add_executable(nalu_preprocess
   ABLFields.cpp
   ChannelFields.cpp
   HITFields.cpp
+  RotateFields.cpp
   RotateMesh.cpp
   BdyIOPlanes.cpp
   NestedRefinement.cpp
