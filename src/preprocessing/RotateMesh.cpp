@@ -47,6 +47,7 @@ RotateMesh::RotateMesh(
     bulk_(mesh.bulk()),
     meshPartNames_(),
     meshParts_(),
+    rotateVel_(false),
     ndim_(meta_.spatial_dimension())
 {
     load(node);
@@ -65,6 +66,9 @@ void RotateMesh::load(const YAML::Node& node)
     angle_ *= std::acos(-1.0) / 180.0;
     axis_ = node["axis"].as<std::vector<double>>();
     origin_ = node["origin"].as<std::vector<double>>();
+    if (node["rotate_vel"]) {
+        rotateVel_ = node["rotate_vel"].as<bool>();
+    }
 
     ThrowAssert(axis_.size() == 3);
     ThrowAssert(origin_.size() == 3);
@@ -89,7 +93,7 @@ void RotateMesh::run()
         std::cout << "Rotating mesh " << std::endl;
     VectorFieldType* coords = meta_.get_field<VectorFieldType>(
         stk::topology::NODE_RANK, "coordinates");
-
+    
     stk::mesh::Selector s_part = stk::mesh::selectUnion(meshParts_);
     const stk::mesh::BucketVector& node_buckets = bulk_.get_buckets(
         stk::topology::NODE_RANK, s_part);
@@ -142,6 +146,41 @@ void RotateMesh::run()
         }
     }
 
+    if (rotateVel_) {
+        VectorFieldType* velocity = meta_.get_field<VectorFieldType>(
+            stk::topology::NODE_RANK, "velocity");
+        if (velocity != nullptr) {        
+            for(auto b: node_buckets) {
+                for(size_t in=0; in < b->size(); in++) {
+                    auto node = (*b)[in];
+                    double* vel = stk::mesh::field_data(*velocity, node);
+                    
+                    double u = vel[0];
+                    double v = vel[1];
+                    double w = vel[2];
+                    
+                    vel[0] = (q0*q0 + q1*q1 - q2*q2 - q3*q3) * u +
+                        2.0 * (q1*q2 - q0*q3) * v +
+                        2.0 * (q0*q2 + q1*q3) * w;
+                    
+                    vel[1] = 2.0 * (q1*q2 + q0*q3) * u +
+                        (q0*q0 - q1*q1 + q2*q2 - q3*q3) * v +
+                        2.0 * (q2*q3 - q0*q1) * w;
+                    
+                    vel[2] = 2.0 * (q1*q3 - q0*q2) * u +
+                        2.0 * (q0*q1 + q2*q3) * v +
+                        (q0*q0 - q1*q1 - q2*q2 + q3*q3) * w;
+                }
+            }
+        } else {
+            if (bulk_.parallel_rank() == 0) {
+                std::cout << "No velocity field found. Skipping " << 
+                    "transformation of velocity field" << std::endl;
+            }
+            rotateVel_ = false;
+        }
+    }
+    
     mesh_.set_write_flag();
 }
 

@@ -71,6 +71,9 @@ private:
     //! Axis around which the rotation is performed
     std::vector<double> axis_;
 
+    //! Rotate the velocity field as well?
+    bool rotateVel_;
+
     //! Dimensionality of the mesh
     int ndim_;
 };
