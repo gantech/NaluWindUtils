@@ -85,14 +85,41 @@ void RotateMesh::initialize()
             meshParts_.push_back(part);
         }
     }
+
+    if (rotateVel_) {
+        mesh_.add_output_field("velocity");
+        mesh_.add_output_field("mesh_displacement");
+        mesh_.add_output_field("turbulent_ke");
+        mesh_.add_output_field("specific_dissipation_rate");
+    }
 }
 
 void RotateMesh::run()
 {
+
+    bool dowrite = (bulk_.parallel_rank() == 0);
+    auto num_steps = mesh_.stkio().get_num_time_steps();
+    auto times = mesh_.stkio().get_time_steps();
+
+    auto final_time = times[num_steps - 1];
+    std::vector<stk::io::MeshField> missing_fields;
+    auto found_time = mesh_.stkio().read_defined_input_fields(final_time, &missing_fields);
+
+    if (missing_fields.size() > 0) {
+        if (dowrite) {
+            std::cout << "Missing fields in the solution file: " << std::endl;
+            for (size_t i=0; i < missing_fields.size(); i++)
+                std::cout << "    -" << missing_fields[i].field()->name() << std::endl;
+        }
+        throw std::runtime_error("ABLStatistics:: missing required fields in database");
+    }
+    
     if (bulk_.parallel_rank() == 0)
         std::cout << "Rotating mesh " << std::endl;
     VectorFieldType* coords = meta_.get_field<VectorFieldType>(
         stk::topology::NODE_RANK, "coordinates");
+    VectorFieldType* mesh_disp = meta_.get_field<VectorFieldType>(
+        stk::topology::NODE_RANK, "mesh_displacement");
     
     stk::mesh::Selector s_part = stk::mesh::selectUnion(meshParts_);
     const stk::mesh::BucketVector& node_buckets = bulk_.get_buckets(
@@ -114,19 +141,27 @@ void RotateMesh::run()
     const double q3 = sinang * axis_[2] / mag;
     double oldxyz[3] = {0.0, 0.0, 0.0};
     double newxyz[3] = {0.0, 0.0, 0.0};
+    double olddisp[3] = {0.0, 0.0, 0.0};
+    double newdisp[3] = {0.0, 0.0, 0.0};
 
     for(auto b: node_buckets) {
         for(size_t in=0; in < b->size(); in++) {
             auto node = (*b)[in];
             double* xyz = stk::mesh::field_data(*coords, node);
+            double* disp = stk::mesh::field_data(*mesh_disp, node);
 
             for (int i=0; i<ndim; i++) {
                 oldxyz[i] = xyz[i];
+                olddisp[i] = disp[i];
             }
 
             const double cx = oldxyz[0] - origin_[0];
             const double cy = oldxyz[1] - origin_[1];
             const double cz = oldxyz[2] - origin_[2];
+
+            const double cdx = olddisp[0] - origin_[0];
+            const double cdy = olddisp[1] - origin_[1];
+            const double cdz = olddisp[2] - origin_[2];
 
             newxyz[0] = (q0*q0 + q1*q1 - q2*q2 - q3*q3) * cx +
                 2.0 * (q1*q2 - q0*q3) * cy +
@@ -140,8 +175,22 @@ void RotateMesh::run()
                 2.0 * (q0*q1 + q2*q3) * cy +
                 (q0*q0 - q1*q1 - q2*q2 + q3*q3) * cz + origin_[2];
 
+            newdisp[0] = (q0*q0 + q1*q1 - q2*q2 - q3*q3) * cdx +
+            2.0 * (q1*q2 - q0*q3) * cdy +
+            2.0 * (q0*q2 + q1*q3) * cdz + origin_[0];
+
+            newdisp[1] = 2.0 * (q1*q2 + q0*q3) * cdx +
+            (q0*q0 - q1*q1 + q2*q2 - q3*q3) * cdy +
+            2.0 * (q2*q3 - q0*q1) * cdz + origin_[1];
+
+            newdisp[2] = 2.0 * (q1*q3 - q0*q2) * cdx +
+            2.0 * (q0*q1 + q2*q3) * cdy +
+            (q0*q0 - q1*q1 - q2*q2 + q3*q3) * cdz + origin_[2];
+            
+
             for (int i=0; i<ndim; i++) {
                 xyz[i] = newxyz[i];
+                disp[i] = newdisp[i];                
             }
         }
     }
